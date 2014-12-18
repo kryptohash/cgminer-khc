@@ -1797,11 +1797,9 @@ void free_work(struct work *work)
 }
 
 static void gen_hash(unsigned char *data, unsigned char *hash, int len);
-#ifdef USE_KRYPTOHASH
-static void calc_diff(struct work *work, int known);
-#else
+
 static void calc_diff(struct work *work, double known);
-#endif
+
 char *workpadding = "000000800000000000000000000000000000000000000000000000000000000000000000000000000000000080020000";
 
 #ifdef HAVE_LIBCURL
@@ -1922,6 +1920,29 @@ static void update_gbt(struct pool *pool)
 		       pool->pool_no, pool->rpc_url);
 	}
 	curl_easy_cleanup(curl);
+}
+
+/* Return the work coin/network difficulty */
+static double get_work_blockdiff(const struct work *work)
+{
+    uint64_t diff64;
+    double numerator;
+
+#ifdef USE_KRYPTOHASH
+    diff64 = bswap_64((uint64_t)(be32toh(*((uint32_t *)(work->data + 108))) & 0xFFFFFF00)) << 8;
+    numerator = (double)bswap_64(0xFFFFFFFFULL);
+#else
+    uint8_t pow = work->data[72];
+    int powdiff = (8 * (0x1d - 3)) - (8 * (pow - 3));;
+    diff64 = be32toh(*((uint32_t *)(work->data + 72))) & 0x0000000000FFFFFF;
+    numerator = 0xFFFFULL << powdiff;
+#endif
+
+    if (unlikely(!diff64)) {
+        diff64 = 1;
+    }
+
+    return numerator / (double)diff64;
 }
 
 #ifdef USE_KRYPTOHASH
@@ -3330,10 +3351,14 @@ out:
 }
 
 
-#ifdef USE_KRYPTOHASH
-
-static double DIFFEXACTONE = 26959946667150639794667015087019630673637144422540572481103610249215.0;
-static const uint64_t diffone = 0xFFFF000000000000ull;
+/* truediffone == 0x00000000FFFF0000000000000000000000000000000000000000000000000000
+* Generate a 256 bit binary LE target by cutting up diff into 64 bit sized
+* portions or vice versa. */
+static const double truediffone = 26959535291011309493156476344723991336010898738574164086137773096960.0;
+static const double bits256 = 115792089237316195423570985008687907853269984665640564039457584007913129639936.0;
+static const double bits192 = 6277101735386680763835789423207666416102355444464034512896.0;
+static const double bits128 = 340282366920938463463374607431768211456.0;
+static const double bits64 = 18446744073709551616.0;
 
 static double raw_diff(struct work *work)
 {
@@ -3346,60 +3371,6 @@ static double raw_diff(struct work *work)
 
     return d64;
 }
-
-/*
- * Calculate the work->work_difficulty based on the work->target
- */
-
-static void calc_diff(struct work *work, int known)
-{
-	struct cgminer_pool_stats *pool_stats = &(work->pool->cgminer_pool_stats);
-	double difficulty;
-
-    if (known)
-		work->work_difficulty = known;
-	else {
-        uint64_t *data64, d64;
-        char rtarget[40];
-
-        swab320(rtarget, work->ktarget);
-        data64 = (uint64_t *)(rtarget);
-        d64 = be64toh(*data64);
-        d64 *= (uint64_t)0x1000000;
-        if (unlikely(!d64))
-            d64 = 1;
-        work->work_difficulty = diffone / d64;
-    }
-
-	difficulty = work->work_difficulty;
-
-	pool_stats->last_diff = difficulty;
-	suffix_string((uint64_t)difficulty, work->pool->diff, sizeof(work->pool->diff), 0);
-
-	if (difficulty == pool_stats->min_diff)
-		pool_stats->min_diff_count++;
-	else if (difficulty < pool_stats->min_diff || pool_stats->min_diff == 0) {
-		pool_stats->min_diff = difficulty;
-		pool_stats->min_diff_count = 1;
-	}
-
-	if (difficulty == pool_stats->max_diff)
-		pool_stats->max_diff_count++;
-	else if (difficulty > pool_stats->max_diff) {
-		pool_stats->max_diff = difficulty;
-		pool_stats->max_diff_count = 1;
-	}
-}
-
-#else
-
-/* truediffone == 0x00000000FFFF0000000000000000000000000000000000000000000000000000
- * Generate a 256 bit binary LE target by cutting up diff into 64 bit sized
- * portions or vice versa. */
-static const double truediffone = 26959535291011309493156476344723991336010898738574164086137773096960.0;
-static const double bits192 = 6277101735386680763835789423207666416102355444464034512896.0;
-static const double bits128 = 340282366920938463463374607431768211456.0;
-static const double bits64 = 18446744073709551616.0;
 
 /* Converts a little endian 256 bit value to a double */
 static double le256todouble(const void *target)
@@ -3422,6 +3393,30 @@ static double le256todouble(const void *target)
 	return dcut64;
 }
 
+/* Converts a little endian 320 bit value to a double */
+static double le320todouble(const void *target)
+{
+	uint64_t *data64;
+	double dcut64;
+
+    data64 = (uint64_t *)((unsigned char *)target + 32);
+    dcut64 = le64toh(*data64) * bits256;
+
+    data64 = (uint64_t *)((unsigned char *)target + 24);
+    dcut64 += le64toh(*data64) * bits192;
+
+    data64 = (uint64_t *)((unsigned char *)target + 16);
+	dcut64 += le64toh(*data64) * bits128;
+
+    data64 = (uint64_t *)((unsigned char *)target + 8);
+	dcut64 += le64toh(*data64) * bits64;
+
+    data64 = (uint64_t *)target;
+	dcut64 += le64toh(*data64);
+
+	return dcut64;
+}
+
 static void calc_diff(struct work *work, double known)
 {
 	struct cgminer_pool_stats *pool_stats = &(work->pool->cgminer_pool_stats);
@@ -3433,10 +3428,16 @@ static void calc_diff(struct work *work, double known)
 	else {
 		double d64, dcut64;
 
+#ifdef USE_KRYPTOHASH
+        d64 = 1.2731475e+89; // 2^(320 - 24)
+        dcut64 = le320todouble(work->ktarget);
+#else
 		d64 = truediffone;
+
 		if (opt_scrypt)
 			d64 *= (double)65536;
 		dcut64 = le256todouble(work->target);
+#endif
 		if (unlikely(!dcut64))
 			dcut64 = 1;
 		work->work_difficulty = d64 / dcut64;
@@ -3461,7 +3462,7 @@ static void calc_diff(struct work *work, double known)
 		pool_stats->max_diff_count = 1;
 	}
 }
-#endif
+
 
 static void get_benchmark_work(struct work *work)
 {
@@ -4092,30 +4093,24 @@ static bool stale_work(struct work *work, bool share)
 static uint64_t share_diff(const struct work *work)
 {
     bool new_best = false;
-#ifdef USE_KRYPTOHASH
-	uint64_t *data64, d64, ret;
-    char rhash[40];
-
-    swab320(rhash, work->kryptohash);
-	data64 = (uint64_t *)(rhash + 3);
-	d64 = be64toh(*data64);
-	if (unlikely(!d64))
-		d64 = 1;
-	ret = diffone / d64;
-
-#else
 	double d64, s64;
 	uint64_t ret;
 
 	d64 = truediffone;
+
+#ifdef USE_KRYPTOHASH
+    if (opt_kryptohash)
+        d64 *= (double)0x10000;
+    s64 = le320todouble(work->kryptohash);
+#else
 	if (opt_scrypt)
 		d64 *= (double)65536;
 	s64 = le256todouble(work->hash);
+#endif
 	if (unlikely(!s64))
 		s64 = 0;
 
 	ret = round(d64 / s64);
-#endif
 
 	cg_wlock(&control_lock);
 	if (unlikely(ret > best_diff)) {
@@ -4483,17 +4478,7 @@ static int block_sort(struct block *blocka, struct block *blockb)
 /* Decode the current block difficulty which is in packed form */
 static void set_blockdiff(const struct work *work)
 {
-#ifdef USE_KRYPTOHASH
-	uint8_t pow = work->data[111];
-    int powdiff = (8 * (0x26 - 3)) - (8 * (pow - 3));
-    uint32_t diff32 = be32toh(*((uint32_t *)(work->data + 108))) & 0x007FFFFF;
-#else
-	uint8_t pow = work->data[72];
-    int powdiff = (8 * (0x1d - 3)) - (8 * (pow - 3));
-    uint32_t diff32 = be32toh(*((uint32_t *)(work->data + 72))) & 0x00FFFFFF;
-#endif
-	double numerator = 0xFFFFULL << powdiff;
-    double ddiff = numerator / (double)diff32;
+    double ddiff = get_work_blockdiff(work);
 
 	if (unlikely(current_diff != ddiff)) {
 		suffix_string(ddiff, block_diff, sizeof(block_diff), 0);
@@ -6547,35 +6532,28 @@ static void gen_hash(unsigned char *data, unsigned char *hash, int len)
 * cover a huge range of difficulty targets, though not all 320 bits' worth */
 void set_target(unsigned char *dest_target, double diff)
 {
-    unsigned char target[40];
+    unsigned char target[40] = { 0 };
     uint64_t *data64, h64;
-    double d64;
+    double d64, dcut64;
 
     if (unlikely(diff == 0.0)) {
         applog(LOG_ERR, "Diff zero passed to set_target");
         diff = 1.0;
     }
 
-    d64 = diffone;
+    d64 = bits64 * truediffone / 0x1000;
     d64 /= diff;
-    h64 = d64;
 
-    memset(target, 0, sizeof(target));
-    if (h64) {
-        unsigned char rtarget[40];
-
-        memset(rtarget, 0, sizeof(rtarget));
-        data64 = (uint64_t *)(rtarget);
-        *data64 = htobe64(h64);
-        *data64 *= (uint64_t)0x1000000;
-        swab320(target, rtarget);
-    } else {
-        /* Support for the classic all FFs just-below-1 diff */
-        memset(target, 0xff, 37);
-    }
+    dcut64 = d64 / bits256;
+    h64 = dcut64;
+    h64 *= (uint64_t)0x100000;
+    data64 = (uint64_t *)(target + 32);
+    *data64 = htole64(h64);
 
     if (opt_debug) {
-        char *htarget = bin2hex(target, 40);
+        unsigned char rtarget[40];
+        swab320(rtarget, target);
+        char *htarget = bin2hex(rtarget, 40);
 
         applog(LOG_DEBUG, "Generated target %s", htarget);
         free(htarget);
@@ -7096,8 +7074,10 @@ static void hash_sole_work(struct thr_info *mythr)
 			applog(LOG_ERR, "work prepare failed, exiting "	"mining thread %d", thr_id);
 			break;
 		}
-		work->device_diff = MIN(drv->working_diff, work->work_difficulty);
+
 #ifdef USE_SCRYPT
+		work->device_diff = MIN(drv->working_diff, work->work_difficulty);
+
 		/* Dynamically adjust the working diff even if the target
 		 * diff is very high to ensure we can still validate scrypt is
 		 * returning shares. */
@@ -7119,16 +7099,12 @@ static void hash_sole_work(struct thr_info *mythr)
 #ifdef USE_KRYPTOHASH
 		if (opt_kryptohash)
 		{
-			double wu;
+            if (work->work_difficulty)
+                work->device_diff = work->work_difficulty;
+            else
+                work->device_diff = 1;
 
-			wu = total_diff1 / total_secs * 60;
-			if (wu > 30 && drv->working_diff < drv->max_diff && drv->working_diff < work->work_difficulty) {
-				drv->working_diff++;
-				applog(LOG_DEBUG, "Driver %s working diff changed to %.0f",	drv->dname, drv->working_diff);
-				work->device_diff = MIN(drv->working_diff, work->work_difficulty);
-			} else if (drv->working_diff > work->work_difficulty) {
-				drv->working_diff = work->work_difficulty;
-			}
+            applog(LOG_DEBUG, "work->device_diff=%f", work->device_diff);
 			set_target(work->device_target, work->device_diff);
             work->blk.target = *(cl_ulong *)(work->device_target + 32);
 		}
