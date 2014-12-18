@@ -2494,8 +2494,8 @@ static void get_statline(char *buf, size_t bufsiz, struct cgpu_info *cgpu)
 		opt_log_interval,
 		displayed_rolling,
 		displayed_hashes,
-		cgpu->diff_accepted,
-		cgpu->diff_rejected,
+		cgpu->accepted,
+		cgpu->rejected,
 		cgpu->hw_errors,
 		wu);
 	cgpu->drv->get_statline(buf, bufsiz, cgpu);
@@ -4483,7 +4483,8 @@ static void set_blockdiff(const struct work *work)
 	if (unlikely(current_diff != ddiff)) {
 		suffix_string(ddiff, block_diff, sizeof(block_diff), 0);
 		current_diff = ddiff;
-		applog(LOG_NOTICE, "Network diff set to %s", block_diff);
+        if (!QUIET)
+			applog(LOG_NOTICE, "Network diff set to %s", block_diff);
 	}
 }
 
@@ -4562,7 +4563,7 @@ static bool test_work_current(struct work *work)
         else if (have_longpoll) {
             applog(LOG_NOTICE, "New block detected on network before longpoll");
         }
-        else {
+        else if (!QUIET) {
             applog(LOG_NOTICE, "New block detected on network");
         }
 		restart_threads();
@@ -6872,7 +6873,7 @@ bool test_nonce(struct work *work, uint32_t nonce)
 	uint32_t diff1targ;
 
 	rebuild_nonce(work, nonce);
-	diff1targ = 0x0000ffffUL;
+	diff1targ = 0x000000ffUL;
 
 	return (le32toh(*hash_32) <= diff1targ);
 }
@@ -6973,14 +6974,13 @@ void submit_tested_work(struct thr_info *thr, struct work *work)
 /* Returns true if nonce for work was a valid share */
 bool submit_nonce(struct thr_info *thr, struct work *work, uint32_t nonce)
 {
-	if (test_nonce(work, nonce))
+    if (test_nonce(work, nonce)) {
 		submit_tested_work(thr, work);
-	else {
-		inc_hw_errors(thr);
-		return false;
-	}
+        return true;
+    }
 
-	return true;
+	inc_hw_errors(thr);
+	return false;
 }
 
 /* Allows drivers to submit work items where the driver has changed the ntime
@@ -9380,13 +9380,15 @@ retry:
         // Unlike Bitcoin (and others), Kryptohash won't give miners dummy work.
         // When Mempool is empty, Kryptohash returns diff equal 0 and we ignore the work.
         if (raw_diff(work) == 0) {
-            cgsleep_ms(3000);
+            cgsleep_ms(2000);
             if (logging) {
                 unsigned char bedata[40];
                 char hexstr[82];
 
                 logging = false;
-                applog(LOG_WARNING, "Waiting for work from Pool %d", pool->pool_no);
+                if (!QUIET)
+                    applog(LOG_WARNING, "Waiting for new work from Pool %d", pool->pool_no);
+
                 memset(bedata, 0, sizeof(bedata));
                 __bin2hex(hexstr, bedata, 40);
                 clear_curblock(hexstr, bedata);
