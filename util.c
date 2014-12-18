@@ -1534,12 +1534,12 @@ static char *json_array_string(json_t *val, unsigned int entry)
 	return NULL;
 }
 
-static char *blank_merkel = "0000000000000000000000000000000000000000000000000000000000000000";
+static char *blank_merkel = "00000000000000000000000000000000000000000000000000000000000000000000000000000000";
 
 static bool parse_notify(struct pool *pool, json_t *val)
 {
 	char *job_id, *prev_hash, *coinbase1, *coinbase2, *bbversion, *nbit,
-	     *ntime, *header;
+	     *ntime, *ntxtime, *header;
 	size_t cb1_len, cb2_len, alloc_len;
 	unsigned char *cb1, *cb2;
 	bool clean, ret = false;
@@ -1559,9 +1559,10 @@ static bool parse_notify(struct pool *pool, json_t *val)
 	bbversion = json_array_string(val, 5);
 	nbit = json_array_string(val, 6);
 	ntime = json_array_string(val, 7);
-	clean = json_is_true(json_array_get(val, 8));
+	ntxtime = json_array_string(val, 8);
+	clean = json_is_true(json_array_get(val, 9));
 
-	if (!job_id || !prev_hash || !coinbase1 || !coinbase2 || !bbversion || !nbit || !ntime) {
+	if (!job_id || !prev_hash || !coinbase1 || !coinbase2 || !bbversion || !nbit || !ntime || !ntxtime) {
 		/* Annoying but we must not leak memory */
 		if (job_id)
 			free(job_id);
@@ -1577,6 +1578,8 @@ static bool parse_notify(struct pool *pool, json_t *val)
 			free(nbit);
 		if (ntime)
 			free(ntime);
+		if (ntxtime)
+			free(ntxtime);
 		goto out;
 	}
 
@@ -1586,6 +1589,7 @@ static bool parse_notify(struct pool *pool, json_t *val)
 	free(pool->swork.bbversion);
 	free(pool->swork.nbit);
 	free(pool->swork.ntime);
+	free(pool->swork.ntxtime);
 	pool->swork.job_id = job_id;
 	pool->swork.prev_hash = prev_hash;
 	cb1_len = strlen(coinbase1) / 2;
@@ -1593,6 +1597,7 @@ static bool parse_notify(struct pool *pool, json_t *val)
 	pool->swork.bbversion = bbversion;
 	pool->swork.nbit = nbit;
 	pool->swork.ntime = ntime;
+	pool->swork.ntxtime = ntxtime;
 	pool->swork.clean = clean;
 	alloc_len = pool->swork.cb_len = cb1_len + pool->n1_len + pool->n2size + cb2_len;
 	pool->nonce2_offset = cb1_len + pool->n1_len;
@@ -1605,17 +1610,17 @@ static bool parse_notify(struct pool *pool, json_t *val)
 		for (i = 0; i < merkles; i++) {
 			char *merkle = json_array_string(arr, i);
 
-			pool->swork.merkle_bin[i] = malloc(32);
+			pool->swork.merkle_bin[i] = malloc(40);
 			if (unlikely(!pool->swork.merkle_bin[i]))
 				quit(1, "Failed to malloc pool swork merkle_bin");
-			hex2bin(pool->swork.merkle_bin[i], merkle, 32);
+			hex2bin(pool->swork.merkle_bin[i], merkle, 40);
 			free(merkle);
 		}
 	}
 	pool->swork.merkles = merkles;
 	if (clean)
 		pool->nonce2 = 0;
-	pool->merkle_offset = strlen(pool->swork.bbversion) + strlen(pool->swork.prev_hash);
+	pool->merkle_offset = strlen(pool->swork.bbversion) + strlen(pool->swork.prev_hash) + 8;
 #ifdef USE_KRYPTOHASH
     pool->swork.header_len = pool->merkle_offset +
 	/* merkle_hash */	40 + 8 + 8 + 4 +
@@ -1636,14 +1641,18 @@ static bool parse_notify(struct pool *pool, json_t *val)
 	align_len(&pool->swork.header_len);
 	header = alloca(pool->swork.header_len);
 	snprintf(header, pool->swork.header_len,
-		"%s%s%s%s%s%s%s",
+		"%s%s%s%s%s%s%s%s%s%s%s",
 		pool->swork.bbversion,
+		"00000000", /* region */
 		pool->swork.prev_hash,
 		blank_merkel,
-		pool->swork.ntime,
+		pool->swork.ntxtime,
+		"0000000000000000", /* hash_coin */
+		"00000000", /* sig_checksum */
 		pool->swork.nbit,
+		pool->swork.ntime,
 		"00000000", /* nonce */
-		workpadding);
+		"0000000000000000");
 	if (unlikely(!hex2bin(pool->header_bin, header, 128)))
 		quit(1, "Failed to convert header to header_bin in parse_notify");
 

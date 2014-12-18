@@ -6683,7 +6683,7 @@ static void gen_stratum_work(struct pool *pool, struct work *work)
 
     /* Copy the data template from header_bin */
     memcpy(work->data, pool->header_bin, 128);
-    memcpy(work->data + pool->merkle_offset, merkle_root, 40);
+    memcpy(work->data + pool->merkle_offset, merkle_sha, 40);
 
     /* Store the stratum work diff to check it still matches the pool's
     * stratum diff when submitting shares */
@@ -6699,7 +6699,7 @@ static void gen_stratum_work(struct pool *pool, struct work *work)
         char *header, *merkle_hash;
 
         header = bin2hex(work->data, 128);
-        merkle_hash = bin2hex((const unsigned char *)merkle_root, 32);
+        merkle_hash = bin2hex((const unsigned char *)merkle_sha, 40);
         applog(LOG_DEBUG, "Generated stratum merkle %s", merkle_hash);
         applog(LOG_DEBUG, "Generated stratum header %s", header);
         applog(LOG_DEBUG, "Work job_id %s nonce2 %d ntime %s", work->job_id, work->nonce2, work->ntime);
@@ -6707,7 +6707,7 @@ static void gen_stratum_work(struct pool *pool, struct work *work)
         free(merkle_hash);
     }
 
-    set_target(work->target, work->sdiff);
+    set_target(work->ktarget, work->sdiff);
 
     local_work++;
     work->pool = pool;
