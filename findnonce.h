@@ -12,9 +12,9 @@
 #define SCRYPT_BUFFERSIZE (sizeof(uint32_t) * SCRYPT_MAXBUFFERS)
 #define SCRYPT_FOUND (0xFF)
 
-#define KRYPTOHASH_MAXBUFFERS (0x10)
+#define KRYPTOHASH_MAXBUFFERS (0x100)
 #define KRYPTOHASH_OUTBUFFER_SZ (sizeof(uint32_t) * KRYPTOHASH_MAXBUFFERS)
-#define KRYPTOHASH_FOUND (0xF)
+#define KRYPTOHASH_FOUND (0xFF)
 
 #ifdef HAVE_OPENCL
 extern void precalc_hash(dev_blk_ctx *blk, uint32_t *state, uint32_t *data);
