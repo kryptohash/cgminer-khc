@@ -1595,7 +1595,6 @@ static int64_t opencl_scanhash(struct thr_info *thr, struct work *work,	int64_t 
 	size_t localThreads[1] = { clState->wsize };
 	int64_t hashes;
 #ifdef USE_KRYPTOHASH
-    int64_t nonceoffset;
 	int found = KRYPTOHASH_FOUND;
 	int buffersize = KRYPTOHASH_OUTBUFFER_SZ;
 #else
@@ -1661,16 +1660,7 @@ static int64_t opencl_scanhash(struct thr_info *thr, struct work *work,	int64_t 
 		return -1;
 	}
 
-#ifdef USE_KRYPTOHASH
-    /* In order to prevent sending the same work to other GPUs, adjust nonce based on
-     * the virtual gpu number.
-     */
-    nonceoffset = hashes * gpu->virtual_gpu;
-    if (nonceoffset) {
-        work->blk.nonce += nonceoffset;
-    }
-    //applog(LOG_DEBUG, "Nonce 0x%08x for thread %i, virtual GPU %i", work->blk.nonce, thr_id, gpu->virtual_gpu);
-#else
+#ifndef USE_KRYPTOHASH
 	/* The amount of work scanned can fluctuate when intensity changes
 	 * and since we do this one cycle behind, we increment the work more
 	 * than enough to prevent repeating work */
