@@ -4988,7 +4988,10 @@ void write_config(FILE *fcfg)
 					fprintf(fcfg, "scrypt");
 					break;
                 case KL_KRYPTOHASH:
-                    fprintf(fcfg, "kryptohash");
+                    fprintf(fcfg, "kshake320");
+                    break;
+                case KL_KRYPTOHASH2:
+                    fprintf(fcfg, "kshake320v2");
                     break;
 			}
 		}

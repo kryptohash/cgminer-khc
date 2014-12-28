@@ -271,8 +271,10 @@ static enum cl_kernels select_kernel(char *arg)
 		return KL_SCRYPT;
 #endif
 #ifdef USE_KRYPTOHASH
-    if (!strcmp(arg, "kryptohash"))
+    if (!strcmp(arg, "kshake320"))
         return KL_KRYPTOHASH;
+    if (!strcmp(arg, "kshake320v2"))
+        return KL_KRYPTOHASH2;
 #endif
 	return KL_NONE;
 }
@@ -285,8 +287,6 @@ char *set_kernel(char *arg)
 
 	if (opt_scrypt)
 		return "Cannot specify a kernel with scrypt";
-	if (opt_kryptohash)
-		return "Cannot specify a kernel with kryptohash";
 	nextptr = strtok(arg, ",");
 	if (nextptr == NULL)
 		return "Invalid parameters for set kernel";
@@ -1474,7 +1474,10 @@ static bool opencl_thread_prepare(struct thr_info *thr)
 #endif
 #ifdef USE_KRYPTOHASH
             case KL_KRYPTOHASH:
-                cgpu->kname = "kryptohash";
+                cgpu->kname = "kshake320";
+                break;
+            case KL_KRYPTOHASH2:
+                cgpu->kname = "kshake320v2";
                 break;
 #endif
 			case KL_POCLBM:
@@ -1531,7 +1534,11 @@ static bool opencl_thread_init(struct thr_info *thr)
 #ifdef USE_KRYPTOHASH
         case KL_KRYPTOHASH:
 			thrdata->queue_kernel_parameters = &queue_kryptohash_kernel;
-            applog(LOG_DEBUG, "opencl_thread_init: thread id=%d using kryptohash", thr_id);
+            applog(LOG_DEBUG, "opencl_thread_init: thread id=%d using kshake320", thr_id);
+			break;
+        case KL_KRYPTOHASH2:
+			thrdata->queue_kernel_parameters = &queue_kryptohash_kernel;
+            applog(LOG_DEBUG, "opencl_thread_init: thread id=%d using kshake320v2", thr_id);
 			break;
 #endif
 		default:
@@ -1597,10 +1604,12 @@ static int64_t opencl_scanhash(struct thr_info *thr, struct work *work,	int64_t 
 #ifdef USE_KRYPTOHASH
 	int found = KRYPTOHASH_FOUND;
 	int buffersize = KRYPTOHASH_OUTBUFFER_SZ;
+
+    globalThreads[0] = gpu->shaders * gpu->shaders_mul;
+    hashes = clState->vwidth * globalThreads[0];
 #else
 	int found = opt_scrypt ? SCRYPT_FOUND : FOUND;
 	int buffersize = opt_scrypt ? SCRYPT_BUFFERSIZE : BUFFERSIZE;
-#endif
 
 	/* Windows' timer resolution is only 15ms so oversample 5x */
 	if (gpu->dynamic && (++gpu->intervals * dynamic_us) > 70000) {
@@ -1620,10 +1629,6 @@ static int64_t opencl_scanhash(struct thr_info *thr, struct work *work,	int64_t 
 		gpu->intervals = 0;
 	}
 
-#ifdef USE_KRYPTOHASH
-    globalThreads[0] = gpu->shaders * gpu->shaders_mul;
-    hashes = clState->vwidth * globalThreads[0];
-#else
 	set_threads_hashes(clState->vwidth, &hashes, globalThreads, localThreads[0], &gpu->intensity);
     if (hashes > gpu->max_hashes) {
         gpu->max_hashes = hashes;
