@@ -410,6 +410,7 @@ enum cl_kernels {
 	KL_DIABLO,
 	KL_SCRYPT,
     KL_KRYPTOHASH,
+    KL_KRYPTOHASH2,
 };
 
 enum dev_reason {

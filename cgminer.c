@@ -2490,7 +2490,7 @@ static void get_statline(char *buf, size_t bufsiz, struct cgpu_info *cgpu)
 
 	snprintf(buf, bufsiz, "%s%d ", cgpu->drv->name, cgpu->device_id);
 	cgpu->drv->get_statline_before(buf, bufsiz, cgpu);
-	tailsprintf(buf, bufsiz, "(%ds):%s (avg):%sh/s | A:%.0f R:%.0f HW:%d WU:%.1f/m",
+	tailsprintf(buf, bufsiz, "(%ds):%s (avg):%sh/s | A:%d R:%d HW:%d WU:%.1f/m",
 		opt_log_interval,
 		displayed_rolling,
 		displayed_hashes,
@@ -2498,7 +2498,10 @@ static void get_statline(char *buf, size_t bufsiz, struct cgpu_info *cgpu)
 		cgpu->rejected,
 		cgpu->hw_errors,
 		wu);
+
+#ifndef USE_KRYPTOHASH		
 	cgpu->drv->get_statline(buf, bufsiz, cgpu);
+#endif	
 }
 
 static bool shared_strategy(void)
@@ -2623,10 +2626,22 @@ static void curses_print_devstatus(struct cgpu_info *cgpu, int count)
 		cg_wprintw(statuswin, "REST  ");
 	else
 		cg_wprintw(statuswin, "%6s", displayed_rolling);
-	adj_fwidth(cgpu->diff_accepted, &dawidth);
-	adj_fwidth(cgpu->diff_rejected, &drwidth);
+
 	adj_width(cgpu->hw_errors, &hwwidth);
 	adj_width(wu, &wuwidth);
+#ifdef USE_KRYPTOHASH
+	adj_width(cgpu->accepted, &dawidth);
+	adj_width(cgpu->rejected, &drwidth);
+
+	cg_wprintw(statuswin, "/%6sh/s | A:%*d R:%*d HW:%*d WU:%*.1f/m",
+			displayed_hashes,
+			dawidth, cgpu->accepted,
+			drwidth, cgpu->rejected,
+			hwwidth, cgpu->hw_errors,
+			wuwidth + 2, wu);
+#else		
+	adj_fwidth(cgpu->diff_accepted, &dawidth);
+	adj_fwidth(cgpu->diff_rejected, &drwidth);
 
 	cg_wprintw(statuswin, "/%6sh/s | A:%*.0f R:%*.0f HW:%*d WU:%*.1f/m",
 			displayed_hashes,
@@ -2634,9 +2649,14 @@ static void curses_print_devstatus(struct cgpu_info *cgpu, int count)
 			drwidth, cgpu->diff_rejected,
 			hwwidth, cgpu->hw_errors,
 			wuwidth + 2, wu);
+#endif
 
 	logline[0] = '\0';
+	
+#ifndef USE_KRYPTOHASH
 	cgpu->drv->get_statline(logline, sizeof(logline), cgpu);
+#endif
+	
 	cg_wprintw(statuswin, "%s", logline);
 
 	wclrtoeol(statuswin);
@@ -4988,7 +5008,10 @@ void write_config(FILE *fcfg)
 					fprintf(fcfg, "scrypt");
 					break;
                 case KL_KRYPTOHASH:
-                    fprintf(fcfg, "kryptohash");
+                    fprintf(fcfg, "kshake320");
+                    break;
+                case KL_KRYPTOHASH2:
+                    fprintf(fcfg, "kshake320v2");
                     break;
 			}
 		}

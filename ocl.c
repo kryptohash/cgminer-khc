@@ -464,6 +464,12 @@ _clState *initCl(unsigned int gpu, char *name, size_t nameSize)
             /* Kryptohash only supports vector 1 */
             cgpu->vwidth = 1;
             break;
+        case KL_KRYPTOHASH2:
+            strcpy(filename, KRYPTOHASH_KERNNAME2".cl");
+            strcpy(binaryfilename, KRYPTOHASH_KERNNAME2);
+            /* Kryptohash only supports vector 1 */
+            cgpu->vwidth = 1;
+            break;
 		case KL_NONE: /* Shouldn't happen */
 		case KL_DIABLO:
 			strcpy(filename, DIABLO_KERNNAME".cl");
