@@ -215,6 +215,7 @@ _clState *initCl(unsigned int gpu, char *name, size_t nameSize)
 	char pbuff[256], vbuff[255];
 	cl_platform_id* platforms;
 	cl_uint preferred_vwidth;
+    cl_uint max_compute_units = 0;
 	cl_device_id *devices;
 	cl_uint numPlatforms;
 	cl_uint numDevices;
@@ -364,6 +365,19 @@ _clState *initCl(unsigned int gpu, char *name, size_t nameSize)
 	}
 	applog(LOG_DEBUG, "Preferred vector width reported %d", preferred_vwidth);
 
+#ifdef USE_KRYPTOHASH
+    // These GPUs are GCN Architecture. 64 Shader Processors in every Compute Unit.
+    if (strstr(name, "Hawaii") || strstr(name, "Curaçao") || strstr(name, "Bonaire") ||
+        strstr(name, "Tahiti") || strstr(name, "Cape Verde") || strstr(name, "Pitcairn")) {
+        status = clGetDeviceInfo(devices[gpu], CL_DEVICE_MAX_COMPUTE_UNITS, sizeof(cl_uint), (void *)&max_compute_units, NULL);
+        if (status != CL_SUCCESS) {
+            applog(LOG_ERR, "Error %d: Failed to clGetDeviceInfo when trying to get CL_DEVICE_MAX_COMPUTE_UNITS", status);
+            return NULL;
+        }
+        applog(LOG_DEBUG, "Max compute units reported %d", max_compute_units);
+    }
+#endif
+
 	status = clGetDeviceInfo(devices[gpu], CL_DEVICE_MAX_WORK_GROUP_SIZE, sizeof(size_t), (void *)&clState->max_work_size, NULL);
 	if (status != CL_SUCCESS) {
 		applog(LOG_ERR, "Error %d: Failed to clGetDeviceInfo when trying to get CL_DEVICE_MAX_WORK_GROUP_SIZE", status);
@@ -488,14 +502,23 @@ _clState *initCl(unsigned int gpu, char *name, size_t nameSize)
 		clState->vwidth == 1 && clState->hasOpenCL11plus) || opt_scrypt)
 			clState->goffset = true;
 
-	if (cgpu->work_size && cgpu->work_size <= clState->max_work_size)
+    if (cgpu->work_size && cgpu->work_size <= clState->max_work_size) {
 		clState->wsize = cgpu->work_size;
-	else if (opt_scrypt)
+    }
+#ifdef USE_KRYPTOHASH
+    else if (opt_kryptohash) {
+        clState->wsize = 256;
+    }
+#endif
+    else if (opt_scrypt) {
 		clState->wsize = 256;
-	else if (strstr(name, "Tahiti"))
+    }
+    else if (strstr(name, "Tahiti")) {
 		clState->wsize = 64;
-	else
+    }
+    else {
 		clState->wsize = (clState->max_work_size <= 256 ? clState->max_work_size : 256) / clState->vwidth;
+    }
 	cgpu->work_size = clState->wsize;
 
 #ifdef USE_SCRYPT
@@ -531,6 +554,16 @@ _clState *initCl(unsigned int gpu, char *name, size_t nameSize)
             applog(LOG_DEBUG, "GPU %d: selecting shaders multiplier value of 8", gpu);
             cgpu->shaders_mul = 8;
         }
+        if (cgpu->dynamic && !cgpu->dyninterval) {
+            applog(LOG_DEBUG, "GPU %d: No Dynamic Interval was set. Disabling Dynamic Intensity", gpu);
+            cgpu->dynamic = false;
+        }
+        if (!cgpu->intensity) {
+            applog(LOG_DEBUG, "GPU %d: No Intensity value was set. Disabling Intensity", gpu);
+            cgpu->ignoreintesity = true;
+        }
+
+        cgpu->computeunits = max_compute_units;
     }
 #endif
 
@@ -640,17 +673,21 @@ build:
 	else
 #endif
 #ifdef USE_KRYPTOHASH
-    if (opt_kryptohash)
+    if (opt_kryptohash) {
         sprintf(CompilerOptions, "-D WORKSIZE=%d", (int)clState->wsize);
+		if (opt_cl_optimization_disable) {
+			strcat(CompilerOptions, " -cl-opt-disable");
+		}
+	}		
     else
 #endif
 	{
 		sprintf(CompilerOptions, "-D WORKSIZE=%d -D VECTORS%d -D WORKVEC=%d", (int)clState->wsize, clState->vwidth, (int)clState->wsize * clState->vwidth);
 	}
 	applog(LOG_DEBUG, "Setting worksize to %d", (int)(clState->wsize));
-	if (clState->vwidth > 1)
+	if (clState->vwidth > 1) {
 		applog(LOG_DEBUG, "Patched source to suit %d vectors", clState->vwidth);
-
+	}
 	if (clState->hasBitAlign && !opt_kryptohash) {
 		strcat(CompilerOptions, " -D BITALIGN");
 		applog(LOG_DEBUG, "cl_amd_media_ops found, setting BITALIGN");

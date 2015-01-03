@@ -108,7 +108,7 @@ const int opt_cutofftemp = 95;
 int opt_log_interval = 5;
 #ifdef USE_KRYPTOHASH
 int opt_queue = 0;
-int opt_expiry = 30;
+int opt_expiry = 16;
 #else
 int opt_queue = 1;
 int opt_expiry = 120;
@@ -130,6 +130,7 @@ bool opt_scrypt;
 #endif
 #ifdef USE_KRYPTOHASH
 bool opt_kryptohash;
+bool opt_cl_optimization_disable;
 #endif
 #endif
 
@@ -1191,9 +1192,11 @@ static struct opt_table opt_config_table[] = {
 			opt_set_bool, &opt_fix_protocol,
 			"Do not redirect to a different getwork protocol (eg. stratum)"),
 #ifdef HAVE_OPENCL
+#ifndef USE_KRYPTOHASH
 	OPT_WITH_ARG("--gpu-dyninterval",
 		     set_int_1_to_65535, opt_show_intval, &opt_dynamic_interval,
 		     "Set the refresh interval in ms for GPUs using dynamic intensity"),
+#endif			 
 	OPT_WITH_ARG("--gpu-platform",
 		     set_int_0_to_9999, opt_show_intval, &opt_platform_id,
 		     "Select OpenCL platform ID to use for GPU mining"),
@@ -1235,6 +1238,13 @@ static struct opt_table opt_config_table[] = {
 		     "Intensity of GPU scanning (d or " MIN_SHA_INTENSITY_STR
 		     " -> " MAX_SCRYPT_INTENSITY_STR
 		     ",default: d to maintain desktop interactivity)"),
+#endif
+#ifdef USE_KRYPTOHASH
+    OPT_WITH_ARG("--intensity|-I",
+             set_intensity, NULL, NULL,
+             "Intensity of GPU scanning " MIN_INTENSITY_STR
+             " -> " MAX_INTENSITY_STR
+             ", d = dynamic, default: n = no intensity"),
 #else
 	OPT_WITH_ARG("--intensity|-I",
 		     set_intensity, NULL, NULL,
@@ -1410,6 +1420,12 @@ static struct opt_table opt_config_table[] = {
     OPT_WITH_ARG("--shaders-mul",
              set_shaders_mul, NULL, NULL,
             "Set number of threads per each GPU shader for kryptohash mining, comma separated."),
+    OPT_WITHOUT_ARG("--cl-opt-disable",
+            opt_set_bool, &opt_cl_optimization_disable,
+            "This option disables all optimizations used for building the OpenCL program."),
+    OPT_WITH_ARG("--dyninterval",
+             set_dyninterval, NULL, NULL,
+            "Set the refresh interval in ms for each GPUs using dynamic intensity, comma separated."),
 #endif
 	OPT_WITH_ARG("--sharelog",
 		     set_sharelog, NULL, NULL,
@@ -2499,9 +2515,7 @@ static void get_statline(char *buf, size_t bufsiz, struct cgpu_info *cgpu)
 		cgpu->hw_errors,
 		wu);
 
-#ifndef USE_KRYPTOHASH		
 	cgpu->drv->get_statline(buf, bufsiz, cgpu);
-#endif	
 }
 
 static bool shared_strategy(void)
@@ -2653,9 +2667,7 @@ static void curses_print_devstatus(struct cgpu_info *cgpu, int count)
 
 	logline[0] = '\0';
 	
-#ifndef USE_KRYPTOHASH
 	cgpu->drv->get_statline(logline, sizeof(logline), cgpu);
-#endif
 	
 	cg_wprintw(statuswin, "%s", logline);
 

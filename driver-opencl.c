@@ -254,6 +254,31 @@ char *set_shaders_mul(char *arg)
 
     return NULL;
 }
+
+char *set_dyninterval(char *arg)
+{
+    int i, val = 0, device = 0;
+    char *nextptr;
+
+    nextptr = strtok(arg, ",");
+    if (nextptr == NULL)
+        return "Invalid parameters for set dynamic interval";
+    val = atoi(nextptr);
+
+    gpus[device++].dyninterval = val;
+
+    while ((nextptr = strtok(NULL, ",")) != NULL) {
+        val = atoi(nextptr);
+
+        gpus[device++].dyninterval = val;
+    }
+    if (device == 1) {
+        for (i = device; i < MAX_GPUDEVICES; i++)
+            gpus[i].dyninterval = gpus[0].dyninterval;
+    }
+
+    return NULL;
+}
 #endif
 
 static enum cl_kernels select_kernel(char *arg)
@@ -605,13 +630,27 @@ char *set_intensity(char *arg)
 	nextptr = strtok(arg, ",");
 	if (nextptr == NULL)
 		return "Invalid parameters for set intensity";
-	if (!strncasecmp(nextptr, "d", 1))
+    if (!strncasecmp(nextptr, "d", 1)) {
 		gpus[device].dynamic = true;
+#ifdef USE_KRYPTOHASH
+        gpus[device].ignoreintesity = false;
+#endif
+    }
+#ifdef USE_KRYPTOHASH
+	else if (!strncasecmp(nextptr, "n", 1)) {
+		gpus[device].ignoreintesity = true;
+		gpus[device].dynamic = false;
+	}
+#endif
 	else {
 		gpus[device].dynamic = false;
+#ifdef USE_KRYPTOHASH
+        gpus[device].ignoreintesity = false;
+#endif
 		val = atoi(nextptr);
-		if (val < MIN_INTENSITY || val > MAX_GPU_INTENSITY)
+        if (val < MIN_INTENSITY || val > MAX_GPU_INTENSITY) {
 			return "Invalid value passed to set intensity";
+        }
 		tt = &gpus[device].intensity;
 		*tt = val;
 	}
@@ -619,14 +658,27 @@ char *set_intensity(char *arg)
 	device++;
 
 	while ((nextptr = strtok(NULL, ",")) != NULL) {
-		if (!strncasecmp(nextptr, "d", 1))
+        if (!strncasecmp(nextptr, "d", 1)) {
 			gpus[device].dynamic = true;
+#ifdef USE_KRYPTOHASH
+            gpus[device].ignoreintesity = false;
+#endif
+        }
+#ifdef USE_KRYPTOHASH
+		else if (!strncasecmp(nextptr, "n", 1)) {
+			gpus[device].ignoreintesity = true;
+			gpus[device].dynamic = false;
+		}
+#endif
 		else {
 			gpus[device].dynamic = false;
+#ifdef USE_KRYPTOHASH
+            gpus[device].ignoreintesity = false;
+#endif
 			val = atoi(nextptr);
-			if (val < MIN_INTENSITY || val > MAX_GPU_INTENSITY)
+            if (val < MIN_INTENSITY || val > MAX_GPU_INTENSITY) {
 				return "Invalid value passed to set intensity";
-
+            }
 			tt = &gpus[device].intensity;
 			*tt = val;
 		}
@@ -636,6 +688,9 @@ char *set_intensity(char *arg)
 		for (i = device; i < MAX_GPUDEVICES; i++) {
 			gpus[i].dynamic = gpus[0].dynamic;
 			gpus[i].intensity = gpus[0].intensity;
+#ifdef USE_KRYPTOHASH
+			gpus[i].ignoreintesity = gpus[0].ignoreintesity;
+#endif			
 		}
 	}
 
@@ -792,15 +847,18 @@ retry:
 	logwin_update();
 	input = getch();
 
-	if (nDevs == 1)
+    if (nDevs == 1) {
 		selected = 0;
-	else
+    }
+    else {
 		selected = -1;
+    }
 	if (!strncasecmp(&input, "e", 1)) {
 		struct cgpu_info *cgpu;
 
-		if (selected)
+        if (selected) {
 			selected = curses_int("Select GPU to enable");
+        }
 		if (selected < 0 || selected >= nDevs) {
 			wlogprint("Invalid selection\n");
 			goto retry;
@@ -827,8 +885,9 @@ retry:
 		}
 		goto retry;
 	} if (!strncasecmp(&input, "d", 1)) {
-		if (selected)
+        if (selected) {
 			selected = curses_int("Select GPU to disable");
+        }
 		if (selected < 0 || selected >= nDevs) {
 			wlogprint("Invalid selection\n");
 			goto retry;
@@ -843,32 +902,87 @@ retry:
 		int intensity;
 		char *intvar;
 
-		if (selected)
-			selected = curses_int("Select GPU to change intensity on");
+        if (selected) {
+            selected = curses_int("Select GPU to change Intensity settings");
+        }
 		if (selected < 0 || selected >= nDevs) {
 			wlogprint("Invalid selection\n");
 			goto retry;
 		}
+
+#ifdef USE_KRYPTOHASH
+        intvar = curses_input("Enter a value from " MIN_INTENSITY_STR " -> " MAX_INTENSITY_STR " for a fixed Intensity,\n"
+                              "D for Dynamic Intensity, I to change Dynamic Interval or, N for NO intensity");
+#else
 		if (opt_scrypt) {
 			intvar = curses_input("Set GPU scan intensity (d or "
 					      MIN_SCRYPT_INTENSITY_STR " -> "
 					      MAX_SCRYPT_INTENSITY_STR ")");
-		} else {
+		}
+        else {
 			intvar = curses_input("Set GPU scan intensity (d or "
 					      MIN_SHA_INTENSITY_STR " -> "
 					      MAX_SHA_INTENSITY_STR ")");
 		}
+#endif
 		if (!intvar) {
 			wlogprint("Invalid input\n");
 			goto retry;
 		}
 		if (!strncasecmp(intvar, "d", 1)) {
+#ifdef USE_KRYPTOHASH
+            int interval;
+            char *intervar;
+
+            intervar = curses_input("Dynamic mode selected. Please enter a Dynamic Interval value");
+            if (!intervar) {
+                wlogprint("Invalid input\n");
+                free(intvar);
+                goto retry;
+            }
+
+            interval = atoi(intervar);
+            free(intervar);
+            gpus[selected].dyninterval = interval;
+            gpus[selected].ignoreintesity = false;
+            wlogprint("Dynamic mode enabled on GPU %d with Dynamic Interval of %d\n", selected, gpus[selected].dyninterval);
+#else
 			wlogprint("Dynamic mode enabled on gpu %d\n", selected);
+#endif
 			gpus[selected].dynamic = true;
 			pause_dynamic_threads(selected);
 			free(intvar);
 			goto retry;
 		}
+#ifdef USE_KRYPTOHASH
+        if (!strncasecmp(intvar, "i", 1)) {
+            int interval;
+            char *intervar;
+
+            intervar = curses_input("Enter a new Dynamic Interval value");
+            if (!intervar) {
+                wlogprint("Invalid input\n");
+                free(intvar);
+                goto retry;
+            }
+
+            interval = atoi(intervar);
+            free(intervar);
+            gpus[selected].dyninterval = interval;
+            wlogprint("Dynamic Interval set to %d\n", gpus[selected].dyninterval);
+
+            free(intvar);
+            goto retry;
+        }
+        if (!strncasecmp(intvar, "n", 1)) {
+            wlogprint("Intensity disabled on gpu %d\n", selected);
+            gpus[selected].dynamic = false;
+            gpus[selected].ignoreintesity = true;
+            gpus[selected].intensity = 0;
+            free(intvar);
+            goto retry;
+        }
+#endif
 		intensity = atoi(intvar);
 		free(intvar);
 		if (intensity < MIN_INTENSITY || intensity > MAX_INTENSITY) {
@@ -877,6 +991,9 @@ retry:
 		}
 		gpus[selected].dynamic = false;
 		gpus[selected].intensity = intensity;
+#ifdef USE_KRYPTOHASH
+        gpus[selected].ignoreintesity = false;
+#endif
 		wlogprint("Intensity on gpu %d set to %d\n", selected, intensity);
 		pause_dynamic_threads(selected);
 		goto retry;
@@ -891,16 +1008,19 @@ retry:
 		reinit_device(&gpus[selected]);
 		goto retry;
 	} else if (adl_active && (!strncasecmp(&input, "c", 1))) {
-		if (selected)
+        if (selected) {
 			selected = curses_int("Select GPU to change settings on");
+        }
 		if (selected < 0 || selected >= nDevs) {
 			wlogprint("Invalid selection\n");
 			goto retry;
 		}
 		change_gpusettings(selected);
 		goto retry;
-	} else
+    }
+    else {
 		clear_logwin();
+    }
 
 	immedok(logwin, false);
 	opt_loginput = false;
@@ -1181,6 +1301,39 @@ static cl_int queue_kryptohash_kernel(_clState *clState, dev_blk_ctx *blk, __may
 }
 #endif
 
+#ifdef USE_KRYPTOHASH
+
+static void set_hashes_kryptohash(const unsigned int vectors, int64_t *hashes, size_t *globalThreads, unsigned int minthreads, struct cgpu_info *gpu)
+{
+    unsigned int threads;
+    unsigned int threads_max;
+    unsigned int threads_inc;
+
+    // Sanity checks.
+    if (minthreads < 64) {
+        minthreads = 64;
+    }
+    if (gpu->intensity < MIN_INTENSITY) {
+        gpu->intensity = MIN_INTENSITY;
+    }
+
+    // On GCN platforms, use the number of compute units.
+    if (gpu->computeunits > 0) {
+        threads_max = gpu->computeunits * 64;
+    }
+    else {
+        threads_max = gpu->shaders > minthreads ? gpu->shaders : minthreads;
+    }
+    threads_max /= minthreads;
+
+    threads = (unsigned int)gpu->intensity > threads_max ? threads_max : (unsigned int)gpu->intensity;
+
+    *globalThreads = threads * minthreads * (gpu->shaders_mul > 0 ? gpu->shaders_mul : 8);
+    *hashes = *globalThreads * vectors;
+}
+
+#else
+
 static void set_threads_hashes(unsigned int vectors,int64_t *hashes, size_t *globalThreads, unsigned int minthreads, __maybe_unused int *intensity)
 {
 	unsigned int threads = 0;
@@ -1198,6 +1351,8 @@ static void set_threads_hashes(unsigned int vectors,int64_t *hashes, size_t *glo
 	*globalThreads = threads;
 	*hashes = threads * vectors;
 }
+#endif
+
 #endif /* HAVE_OPENCL */
 
 
@@ -1595,7 +1750,6 @@ static int64_t opencl_scanhash(struct thr_info *thr, struct work *work,	int64_t 
 	struct cgpu_info *gpu = thr->cgpu;
 	_clState *clState = clStates[thr_id];
 	const cl_kernel *kernel = &clState->kernel;
-	const int dynamic_us = opt_dynamic_interval * 1000;
 
 	cl_int status;
 	size_t globalThreads[1];
@@ -1604,12 +1758,13 @@ static int64_t opencl_scanhash(struct thr_info *thr, struct work *work,	int64_t 
 #ifdef USE_KRYPTOHASH
 	int found = KRYPTOHASH_FOUND;
 	int buffersize = KRYPTOHASH_OUTBUFFER_SZ;
-
-    globalThreads[0] = gpu->shaders * gpu->shaders_mul;
-    hashes = clState->vwidth * globalThreads[0];
+    int savedIntensity = gpu->intensity;
+	const int dynamic_us = gpu->dyninterval * 1000;
 #else
+	const int dynamic_us = opt_dynamic_interval * 1000;
 	int found = opt_scrypt ? SCRYPT_FOUND : FOUND;
 	int buffersize = opt_scrypt ? SCRYPT_BUFFERSIZE : BUFFERSIZE;
+#endif
 
 	/* Windows' timer resolution is only 15ms so oversample 5x */
 	if (gpu->dynamic && (++gpu->intervals * dynamic_us) > 70000) {
@@ -1619,21 +1774,49 @@ static int64_t opencl_scanhash(struct thr_info *thr, struct work *work,	int64_t 
 		cgtime(&tv_gpuend);
 		gpu_us = us_tdiff(&tv_gpuend, &gpu->tv_gpustart) / gpu->intervals;
 		if (gpu_us > dynamic_us) {
-			if (gpu->intensity > MIN_INTENSITY)
+            if (gpu->intensity > MIN_INTENSITY) {
 				--gpu->intensity;
+            }
 		} else if (gpu_us < dynamic_us / 2) {
-			if (gpu->intensity < MAX_INTENSITY)
+#ifdef USE_KRYPTOHASH
+            unsigned int threads_max;
+
+            // On GCN platforms, use the number of compute units.
+            if (gpu->computeunits > 0) {
+                threads_max = gpu->computeunits * 64;
+            }
+            else {
+                threads_max = gpu->shaders > localThreads[0] ? gpu->shaders : localThreads[0];
+            }
+            threads_max /= localThreads[0];
+
+            if (gpu->intensity < threads_max) {
+                ++gpu->intensity;
+            }
+#else
+            if (gpu->intensity < MAX_INTENSITY) {
 				++gpu->intensity;
+		}
+#endif
 		}
 		memcpy(&(gpu->tv_gpustart), &tv_gpuend, sizeof(struct timeval));
 		gpu->intervals = 0;
 	}
 
+#ifdef USE_KRYPTOHASH
+    if (gpu->ignoreintesity){
+	    globalThreads[0] = gpu->shaders * gpu->shaders_mul;
+	    hashes = clState->vwidth * globalThreads[0];
+	}
+	else {
+        set_hashes_kryptohash(clState->vwidth, &hashes, globalThreads, localThreads[0], gpu);
+	}
+#else
 	set_threads_hashes(clState->vwidth, &hashes, globalThreads, localThreads[0], &gpu->intensity);
+#endif
     if (hashes > gpu->max_hashes) {
         gpu->max_hashes = hashes;
     }
-#endif
 
 	status = thrdata->queue_kernel_parameters(clState, &work->blk, globalThreads[0]);
 	if (unlikely(status != CL_SUCCESS)) {
