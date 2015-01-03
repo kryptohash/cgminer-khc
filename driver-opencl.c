@@ -945,7 +945,7 @@ retry:
             free(intervar);
             gpus[selected].dyninterval = interval;
             gpus[selected].ignoreintesity = false;
-            wlogprint("Dynamic mode enabled on GPU %d with Dynamic Interval of %d\n", selected, gpus[selected].dyninterval);
+            wlogprint("Dynamic mode enabled on GPU %d with Dynamic Interval of %u\n", selected, (unsigned int)gpus[selected].dyninterval);
 #else
 			wlogprint("Dynamic mode enabled on gpu %d\n", selected);
 #endif
@@ -969,7 +969,7 @@ retry:
             interval = atoi(intervar);
             free(intervar);
             gpus[selected].dyninterval = interval;
-            wlogprint("Dynamic Interval set to %d\n", gpus[selected].dyninterval);
+            wlogprint("Dynamic Interval set to %u\n", (unsigned int)gpus[selected].dyninterval);
 
             free(intvar);
             goto retry;
