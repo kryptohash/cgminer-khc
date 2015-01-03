@@ -27,6 +27,7 @@ extern char *set_thread_concurrency(char *arg);
 extern char *set_kryptohash(char *arg);
 extern char *set_shaders(char *arg);
 extern char *set_shaders_mul(char *arg);
+extern char *set_dyninterval(char *arg);
 #endif
 extern char *set_kernel(char *arg);
 void manage_gpu(void);

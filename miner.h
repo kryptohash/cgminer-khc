@@ -548,6 +548,9 @@ struct cgpu_info {
 #ifdef USE_KRYPTOHASH
     size_t shaders;
     size_t shaders_mul;
+    cl_uint computeunits;
+	bool ignoreintesity;
+	size_t dyninterval;
 #endif
 	struct timeval tv_gpustart;
 	int intervals;
@@ -1214,6 +1217,14 @@ extern bool add_pool_details(struct pool *pool, bool live, char *url, char *user
 #define MAX_INTENSITY (opt_scrypt ? MAX_SCRYPT_INTENSITY : MAX_SHA_INTENSITY)
 #define MAX_INTENSITY_STR (opt_scrypt ? MAX_SCRYPT_INTENSITY_STR : MAX_SHA_INTENSITY_STR)
 #define MAX_GPU_INTENSITY MAX_SCRYPT_INTENSITY
+#endif
+
+#ifdef USE_KRYPTOHASH
+#define MIN_INTENSITY 2
+#define MIN_INTENSITY_STR "2"
+#define MAX_INTENSITY 16
+#define MAX_INTENSITY_STR "16"
+#define MAX_GPU_INTENSITY MAX_INTENSITY
 #else
 #define MIN_INTENSITY MIN_SHA_INTENSITY
 #define MIN_INTENSITY_STR MIN_SHA_INTENSITY_STR
@@ -1241,8 +1252,10 @@ extern bool opt_scrypt;
 #endif
 #ifdef USE_KRYPTOHASH
 extern bool opt_kryptohash;
+extern bool opt_cl_optimization_disable;
 #else
 #define opt_kryptohash (0)
+#define opt_cl_optimization_disable (0)
 #endif
 extern double total_secs;
 extern int mining_threads;
