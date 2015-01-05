@@ -94,10 +94,11 @@ static inline int fsync (int fd)
 #endif
 #endif /* __MINGW32__ */
 
-#if defined (__linux)
- #ifndef LINUX
-  #define LINUX
- #endif
+#if defined (__unix__) && !defined(UNIX)
+# define UNIX
+#endif
+#if defined (__linux__) && !defined(LINUX)
+# define LINUX
 #endif
 
 #ifdef WIN32
@@ -311,6 +312,8 @@ struct gpu_adl {
 	ADLFanSpeedInfo lpFanSpeedInfo;
 	ADLFanSpeedValue lpFanSpeedValue;
 	ADLFanSpeedValue DefFanSpeedValue;
+
+    bool def_fan_valid;
 
 	int iEngineClock;
 	int iMemoryClock;
@@ -1222,8 +1225,8 @@ extern bool add_pool_details(struct pool *pool, bool live, char *url, char *user
 #ifdef USE_KRYPTOHASH
 #define MIN_INTENSITY 2
 #define MIN_INTENSITY_STR "2"
-#define MAX_INTENSITY 16
-#define MAX_INTENSITY_STR "16"
+#define MAX_INTENSITY 32
+#define MAX_INTENSITY_STR "32"
 #define MAX_GPU_INTENSITY MAX_INTENSITY
 #else
 #define MIN_INTENSITY MIN_SHA_INTENSITY
