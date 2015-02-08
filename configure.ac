@@ -2,7 +2,7 @@
 ##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##
 m4_define([v_maj], [3])
 m4_define([v_min], [7])
-m4_define([v_mic], [6])
+m4_define([v_mic], [7])
 ##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##
 m4_define([v_ver], [v_maj.v_min.v_mic])
 m4_define([lt_rev], m4_eval(v_maj + v_min))
@@ -492,8 +492,8 @@ AC_DEFINE_UNQUOTED([POCLBM_KERNNAME], ["poclbm130302"], [Filename for poclbm ker
 AC_DEFINE_UNQUOTED([DIAKGCN_KERNNAME], ["diakgcn121016"], [Filename for diakgcn kernel])
 AC_DEFINE_UNQUOTED([DIABLO_KERNNAME], ["diablo130302"], [Filename for diablo kernel])
 AC_DEFINE_UNQUOTED([SCRYPT_KERNNAME], ["scrypt130511"], [Filename for scrypt kernel])
-AC_DEFINE_UNQUOTED([KRYPTOHASH_KERNNAME], ["kshake320-546"], [Filename for kshake320 version 1 kernel])
-AC_DEFINE_UNQUOTED([KRYPTOHASH_KERNNAME2], ["kshake320-546-uint2"], [Filename for kshake320 version 2 kernel])
+AC_DEFINE_UNQUOTED([KRYPTOHASH_KERNNAME], ["kshake320v1"], [Filename for kshake320 version 1 kernel])
+AC_DEFINE_UNQUOTED([KRYPTOHASH_KERNNAME2], ["kshake320v2"], [Filename for kshake320 version 2 kernel])
 
 AC_SUBST(OPENCL_LIBS)
 AC_SUBST(OPENCL_FLAGS)
