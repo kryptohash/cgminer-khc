@@ -45,7 +45,7 @@ extern char *curly;
 
 #ifdef USE_KRYPTOHASH
 #include "kryptohash.h"
-#define KRYPTOHASH_INBUFFER_SZ (KRATE / 8)
+#define KRYPTOHASH_INBUFFER_SZ (KRATE)
 #endif
 #ifdef STDC_HEADERS
 # include <stdlib.h>
