@@ -164,24 +164,6 @@ __constant uint2 keccak_constants[24] =
 	X##ku ^= (uint2)(input[14].x, input[14].y + nonce); \
 \
 
-#define absorbFromState(X, Y) \
-	X##ba ^= Y##ba; \
-	X##be ^= Y##be; \
-	X##bi ^= Y##bi; \
-	X##bo ^= Y##bo; \
-	X##bu ^= Y##bu; \
-	X##ga ^= Y##ga; \
-	X##ge ^= Y##ge; \
-	X##gi ^= Y##gi; \
-	X##go ^= Y##go; \
-	X##gu ^= Y##gu; \
-	X##ka ^= Y##ka; \
-	X##ke ^= Y##ke; \
-	X##ki ^= Y##ki; \
-	X##ko ^= Y##ko; \
-	X##ku ^= Y##ku; \
-\
-
 
 #define ROUND(X, k) \
 	X##a = X##bu ^ X##gu ^ X##ku ^ X##mu ^ X##su ^ ROTL64_X(X##be ^ X##ge ^ X##ke ^ X##me ^ X##se, 1); \
