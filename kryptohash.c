@@ -4,29 +4,32 @@
 
 void kryptohash_regenhash(struct work *work)
 {
-    unsigned char scratchpad[KPROOF_OF_WORK_SZ / 8];
-#ifdef DATA_FLIP
-    unsigned int data[KRATE / 8], datacopy[KRATE / 8]; // aligned for flip120
+    unsigned char scratchpad1[KPROOF_OF_WORK_SZ];
+    unsigned char scratchpad2[KPROOF_OF_WORK_SZ];
+    int version = *((int *)work->data);
+	
+    KSHAKE320(work->data, KRATE * 8, scratchpad1, KPROOF_OF_WORK_SZ);
 
-    memcpy(datacopy, work->data, KRATE / 8);
-    flip120(data, datacopy);
-    KSHAKE320((unsigned char*)&data, KRATE, scratchpad, KPROOF_OF_WORK_SZ / 8);
-#else
-    KSHAKE320(work->data, KRATE, scratchpad, KPROOF_OF_WORK_SZ / 8);
-#endif
-    KSHAKE320(scratchpad, KPROOF_OF_WORK_SZ, work->kryptohash, 40);
+	if (version <= 1) {
+		KSHAKE320(scratchpad1, KPROOF_OF_WORK_SZ * 8, work->kryptohash, 40);
+	}
+	else {
+		// Swap blocks in chunks of KRATE size
+		unsigned char *p1 = scratchpad1 + KPROOF_OF_WORK_SZ;
+		unsigned char *p2 = scratchpad2;
+		int i;
+		for (i = 0; i < KPOW_MUL; i++)
+		{
+			p1 -= KRATE;
+			memcpy(p2, p1, KRATE);
+			p2 += KRATE;
+		}
+		KSHAKE320(scratchpad2, KPROOF_OF_WORK_SZ * 8, work->kryptohash, 40);
+	}
 }
 
 bool kryptohash_prepare_work(struct thr_info __maybe_unused *thr, struct work *work)
 {
-#ifdef DATA_FLIP
-    unsigned int src[KRATE / 8], dst[KRATE / 8]; // aligned for flip120
-
-    memcpy(src, work->data, KRATE / 8);
-    flip120(dst, src);
-    memcpy(work->blk.kryptohash_data, dst, sizeof(work->blk.kryptohash_data));
-#else
     memcpy(work->blk.kryptohash_data, work->data, sizeof(work->blk.kryptohash_data));
-#endif
     return true;
 }

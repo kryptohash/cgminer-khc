@@ -6,9 +6,9 @@
  * SHAKE's variable output makes it ideal for a Proof-Of-Work solution, as it 
  * can easily be configured to require large amount of memory which increases 
  * the computing cost to those attempting to perform large-scale ASIC attacks.
- *
+ * 
  * This Kernel was implemented using the below OpenCL source file as base:
- *  keccak130718.cl - found in cgminer versions with keccak support
+ * keccak130718.cl - found in cgminer versions with keccak support
  *  Scrypt-jane public domain, OpenCL implementation of scrypt(keccak, chacha,
  *  SCRYPTN,1,1) 2013 mtrlt
  *
@@ -33,61 +33,48 @@
  */
 #define KPROOF_OF_WORK_SZ (546U)
 
-#define EndianSWAP32(x) ( \
-		rotate(x & 0x00ff00ffU, 24U) | \
-		rotate(x & 0xff00ff00U,  8U) \
-		) \
-
-#define EndianSWAP64(x) ( \
-		rotate(x & 0x000000ff000000ffUL, 56UL) | \
-		rotate(x & 0x0000ff000000ff00UL, 40UL) | \
-		rotate(x & 0x00ff000000ff0000UL, 24UL) | \
-		rotate(x & 0xff000000ff000000UL,  8UL) \
-		) \
-
-#define ROL64(a, b) (rotate(a, b))
+#define EndianSWAP(x) (rotate(x & 0x00ff00ffU, 24U) | rotate(x & 0xff00ff00U, 8U))
 
 #define FOUND (0xff)
 #define SETFOUND(Xnonce) output[output[FOUND]++] = Xnonce
 
-__constant ulong keccak_constants[24] = 
+__constant uint2 keccak_constants[24] = 
 {
-	0x0000000000000001UL,
-	0x0000000000008082UL,
-	0x800000000000808aUL,
-	0x8000000080008000UL,
-	0x000000000000808bUL,
-	0x0000000080000001UL,
-	0x8000000080008081UL,
-	0x8000000000008009UL,
-	0x000000000000008aUL,
-	0x0000000000000088UL,
-	0x0000000080008009UL,
-	0x000000008000000aUL,
-	0x000000008000808bUL,
-	0x800000000000008bUL,
-	0x8000000000008089UL,
-	0x8000000000008003UL,
-	0x8000000000008002UL,
-	0x8000000000000080UL,
-	0x000000000000800aUL,
-	0x800000008000000aUL,
-	0x8000000080008081UL,
-	0x8000000000008080UL,
-	0x0000000080000001UL,
-	0x8000000080008008UL 
+	(uint2)(0x00000001,0x00000000),
+	(uint2)(0x00008082,0x00000000),
+	(uint2)(0x0000808a,0x80000000),
+	(uint2)(0x80008000,0x80000000),
+	(uint2)(0x0000808b,0x00000000),
+	(uint2)(0x80000001,0x00000000),
+	(uint2)(0x80008081,0x80000000),
+	(uint2)(0x00008009,0x80000000),
+	(uint2)(0x0000008a,0x00000000),
+	(uint2)(0x00000088,0x00000000),
+	(uint2)(0x80008009,0x00000000),
+	(uint2)(0x8000000a,0x00000000),
+	(uint2)(0x8000808b,0x00000000),
+	(uint2)(0x0000008b,0x80000000),
+	(uint2)(0x00008089,0x80000000),
+	(uint2)(0x00008003,0x80000000),
+	(uint2)(0x00008002,0x80000000),
+	(uint2)(0x00000080,0x80000000),
+	(uint2)(0x0000800a,0x00000000),
+	(uint2)(0x8000000a,0x80000000),
+	(uint2)(0x80008081,0x80000000),
+	(uint2)(0x00008080,0x80000000),
+	(uint2)(0x80000001,0x00000000),
+	(uint2)(0x80008008,0x80000000)
 };
 
 
-
 #define declare(X) \
-	ulong X##ba, X##be, X##bi, X##bo, X##bu; \
-	ulong X##ga, X##ge, X##gi, X##go, X##gu; \
-	ulong X##ka, X##ke, X##ki, X##ko, X##ku; \
-	ulong X##ma, X##me, X##mi, X##mo, X##mu; \
-	ulong X##sa, X##se, X##si, X##so, X##su; \
-	ulong X##a,  X##e,  X##i,  X##o,  X##u; \
-	ulong X##0,  X##1; \
+	uint2 X##ba, X##be, X##bi, X##bo, X##bu; \
+	uint2 X##ga, X##ge, X##gi, X##go, X##gu; \
+	uint2 X##ka, X##ke, X##ki, X##ko, X##ku; \
+	uint2 X##ma, X##me, X##mi, X##mo, X##mu; \
+	uint2 X##sa, X##se, X##si, X##so, X##su; \
+	uint2 X##a,  X##e,  X##i,  X##o,  X##u; \
+	uint2 X##0,  X##1; \
 \
 
 
@@ -139,6 +126,7 @@ __constant ulong keccak_constants[24] =
 \
 
 
+
 #define absorbFromPad(X, off) \
 	X##ba ^= scratchpad[                      off]; \
 	X##be ^= scratchpad[      globalSZ +      off]; \
@@ -173,54 +161,45 @@ __constant ulong keccak_constants[24] =
 	X##ke ^= input[11]; \
 	X##ki ^= input[12]; \
 	X##ko ^= input[13]; \
-	X##ku ^= input[14] + EndianSWAP64(nonce); \
-\
-
-
-/*-
- * If you ever change KRATE, you need to adjust the below delimiter accordingly.
- */
-#define shake320_delimeter(X) \
-	X##ba ^= 0x000000000000001fUL; \
-	X##ku ^= 0x8000000000000000UL; \
+	X##ku ^= (uint2)(input[14].x, input[14].y + nonce); \
 \
 
 
 #define ROUND(X, k) \
-	X##a = X##bu ^ X##gu ^ X##ku ^ X##mu ^ X##su ^ ROL64(X##be ^ X##ge ^ X##ke ^ X##me ^ X##se, 1UL); \
-	X##e = X##ba ^ X##ga ^ X##ka ^ X##ma ^ X##sa ^ ROL64(X##bi ^ X##gi ^ X##ki ^ X##mi ^ X##si, 1UL); \
-	X##i = X##be ^ X##ge ^ X##ke ^ X##me ^ X##se ^ ROL64(X##bo ^ X##go ^ X##ko ^ X##mo ^ X##so, 1UL); \
-	X##o = X##bi ^ X##gi ^ X##ki ^ X##mi ^ X##si ^ ROL64(X##bu ^ X##gu ^ X##ku ^ X##mu ^ X##su, 1UL); \
-	X##u = X##bo ^ X##go ^ X##ko ^ X##mo ^ X##so ^ ROL64(X##ba ^ X##ga ^ X##ka ^ X##ma ^ X##sa, 1UL); \
+	X##a = X##bu ^ X##gu ^ X##ku ^ X##mu ^ X##su ^ ROTL64_X(X##be ^ X##ge ^ X##ke ^ X##me ^ X##se, 1); \
+	X##e = X##ba ^ X##ga ^ X##ka ^ X##ma ^ X##sa ^ ROTL64_X(X##bi ^ X##gi ^ X##ki ^ X##mi ^ X##si, 1); \
+	X##i = X##be ^ X##ge ^ X##ke ^ X##me ^ X##se ^ ROTL64_X(X##bo ^ X##go ^ X##ko ^ X##mo ^ X##so, 1); \
+	X##o = X##bi ^ X##gi ^ X##ki ^ X##mi ^ X##si ^ ROTL64_X(X##bu ^ X##gu ^ X##ku ^ X##mu ^ X##su, 1); \
+	X##u = X##bo ^ X##go ^ X##ko ^ X##mo ^ X##so ^ ROTL64_X(X##ba ^ X##ga ^ X##ka ^ X##ma ^ X##sa, 1); \
 \
 	X##0 = X##be ^ X##e; \
 \
 	X##ba ^= X##a; \
-	X##be = ROL64(X##ge ^ X##e, 44UL); \
-	X##ge = ROL64(X##gu ^ X##u, 20UL); \
-	X##gu = ROL64(X##si ^ X##i, 61UL); \
-	X##si = ROL64(X##ku ^ X##u, 39UL); \
-	X##ku = ROL64(X##sa ^ X##a, 18UL); \
-	X##sa = ROL64(X##bi ^ X##i, 62UL); \
-	X##bi = ROL64(X##ki ^ X##i, 43UL); \
-	X##ki = ROL64(X##ko ^ X##o, 25UL); \
-	X##ko = ROL64(X##mu ^ X##u,  8UL); \
-	X##mu = ROL64(X##so ^ X##o, 56UL); \
-	X##so = ROL64(X##ma ^ X##a, 41UL); \
-	X##ma = ROL64(X##bu ^ X##u, 27UL); \
-	X##bu = ROL64(X##su ^ X##u, 14UL); \
-	X##su = ROL64(X##se ^ X##e,  2UL); \
-	X##se = ROL64(X##go ^ X##o, 55UL); \
-	X##go = ROL64(X##me ^ X##e, 45UL); \
-	X##me = ROL64(X##ga ^ X##a, 36UL); \
-	X##ga = ROL64(X##bo ^ X##o, 28UL); \
-	X##bo = ROL64(X##mo ^ X##o, 21UL); \
-	X##mo = ROL64(X##mi ^ X##i, 15UL); \
-	X##mi = ROL64(X##ke ^ X##e, 10UL); \
-	X##ke = ROL64(X##gi ^ X##i,  6UL); \
-	X##gi = ROL64(X##ka ^ X##a,  3UL); \
-	X##ka = ROL64(        X##0,  1UL); \
-\
+	X##be = ROTL64_Y(X##ge ^ X##e, 12); \
+	X##ge = ROTL64_X(X##gu ^ X##u, 20); \
+	X##gu = ROTL64_Y(X##si ^ X##i, 29); \
+	X##si = ROTL64_Y(X##ku ^ X##u,  7); \
+	X##ku = ROTL64_X(X##sa ^ X##a, 18); \
+	X##sa = ROTL64_Y(X##bi ^ X##i, 30); \
+	X##bi = ROTL64_Y(X##ki ^ X##i, 11); \
+	X##ki = ROTL64_X(X##ko ^ X##o, 25); \
+	X##ko = ROTL64_X(X##mu ^ X##u,  8); \
+	X##mu = ROTL64_Y(X##so ^ X##o, 24); \
+	X##so = ROTL64_Y(X##ma ^ X##a,  9); \
+	X##ma = ROTL64_X(X##bu ^ X##u, 27); \
+	X##bu = ROTL64_X(X##su ^ X##u, 14); \
+	X##su = ROTL64_X(X##se ^ X##e,  2); \
+	X##se = ROTL64_Y(X##go ^ X##o, 23); \
+	X##go = ROTL64_Y(X##me ^ X##e, 13); \
+	X##me = ROTL64_Y(X##ga ^ X##a,  4); \
+	X##ga = ROTL64_X(X##bo ^ X##o, 28); \
+	X##bo = ROTL64_X(X##mo ^ X##o, 21); \
+	X##mo = ROTL64_X(X##mi ^ X##i, 15); \
+	X##mi = ROTL64_X(X##ke ^ X##e, 10); \
+	X##ke = ROTL64_X(X##gi ^ X##i,  6); \
+	X##gi = ROTL64_X(X##ka ^ X##a,  3); \
+	X##ka = ROTL64_X(        X##0,  1); \
+	\
 	X##0 = X##ba; \
 	X##1 = X##be; \
 	X##ba = bitselect(X##ba ^ X##bi, X##ba, X##be); \
@@ -228,7 +207,7 @@ __constant ulong keccak_constants[24] =
 	X##bi = bitselect(X##bi ^ X##bu, X##bi, X##bo); \
 	X##bo = bitselect(X##bo ^  X##0, X##bo, X##bu); \
 	X##bu = bitselect(X##bu ^  X##1, X##bu,  X##0); \
-\
+	\
 	X##0 = X##ga; \
 	X##1 = X##ge; \
 	X##ga = bitselect(X##ga ^ X##gi, X##ga, X##ge); \
@@ -236,7 +215,7 @@ __constant ulong keccak_constants[24] =
 	X##gi = bitselect(X##gi ^ X##gu, X##gi, X##go); \
 	X##go = bitselect(X##go ^  X##0, X##go, X##gu); \
 	X##gu = bitselect(X##gu ^  X##1, X##gu,  X##0); \
-\
+	\
 	X##0 = X##ka; \
 	X##1 = X##ke; \
 	X##ka = bitselect(X##ka ^ X##ki, X##ka, X##ke); \
@@ -244,7 +223,7 @@ __constant ulong keccak_constants[24] =
 	X##ki = bitselect(X##ki ^ X##ku, X##ki, X##ko); \
 	X##ko = bitselect(X##ko ^  X##0, X##ko, X##ku); \
 	X##ku = bitselect(X##ku ^  X##1, X##ku,  X##0); \
-\
+	\
 	X##0 = X##ma; \
 	X##1 = X##me; \
 	X##ma = bitselect(X##ma ^ X##mi, X##ma, X##me); \
@@ -252,7 +231,7 @@ __constant ulong keccak_constants[24] =
 	X##mi = bitselect(X##mi ^ X##mu, X##mi, X##mo); \
 	X##mo = bitselect(X##mo ^  X##0, X##mo, X##mu); \
 	X##mu = bitselect(X##mu ^  X##1, X##mu,  X##0); \
-\
+	\
 	X##0 = X##sa; \
 	X##1 = X##se; \
 	X##sa = bitselect(X##sa ^ X##si, X##sa, X##se); \
@@ -279,49 +258,83 @@ __constant ulong keccak_constants[24] =
 \
 
 
+uint2 ROTL64_X(const uint2 a, const uint b)
+{
+	return (uint2)( (a.x << b) ^ (a.y >> (32 - b)) , (a.y << b) ^ (a.x >> (32 - b)) );
+}
+
+
+uint2 ROTL64_Y(const uint2 a, const uint b)
+{
+	return (uint2)( (a.y << b) ^ (a.x >> (32 - b)) , (a.x << b) ^ (a.y >> (32 - b)) );
+}
+
 
 __kernel
 __attribute__((reqd_work_group_size(WORKSIZE, 1, 1)))
-void search(__global ulong*restrict inputbuffer,
+void search(__global uint2*restrict inputbuffer,
 			__global uint*restrict output,
-			__global ulong*restrict scratchpad,
-			const ulong target)
+			__global uint2*restrict scratchpad,
+			const uint2 target)
 {
 	uint globalID = get_global_id(0);
 	uint globalSZ = get_global_size(0);
 	uint goffset  = globalSZ * KRATE;
 	uint glimit   = goffset * KPROOF_OF_WORK_SZ + globalID;
-	ulong nonce   = (ulong)EndianSWAP32(globalID);
+	uint version  = inputbuffer[0].x;	
 	uint i, j;
 	declare(A)
 
 	initState(A)
-	absorbInput(A, inputbuffer, nonce)
+	absorbInput(A, inputbuffer, globalID)
 	keccak_round(A)
-	shake320_delimeter(A)
-	keccak_round(A)
+	Aba.x ^= 0x0000001fUL;
+	Aku.y ^= 0x80000000UL;
+
 	for (i = globalID; i < glimit; i += goffset)
 	{
-		if (i > globalID)
-		{
-			keccak_round(A)
-		}
+		keccak_round(A)
 		copyToPad(i, A)
 	}
 
 	barrier(CLK_GLOBAL_MEM_FENCE); 
 
 	initState(A)
-	for (i = globalID; i < glimit; i += goffset)
+	if (version <= 1)
 	{
-		absorbFromPad(A, i)
+		for (i = globalID; i < glimit; i += goffset)
+		{
+			absorbFromPad(A, i)
+			keccak_round(A)
+		}
+	}
+	else
+	{
+		for (i = glimit - goffset; i > globalID; i -= goffset)
+		{
+			absorbFromPad(A, i)
+			keccak_round(A)
+		}
+		absorbFromPad(A, globalID)
 		keccak_round(A)
 	}
-	shake320_delimeter(A)
+
+	Aba.x ^= 0x0000001fUL;
+	Aku.y ^= 0x80000000UL;
 	keccak_round(A)
 
-	if (Abu <= target)
+	if (target.y != 0)
 	{
-		SETFOUND(globalID);
+		if (Abu.y <= target.y)
+		{
+			SETFOUND(globalID);
+		}
+	}
+	else
+	{
+		if (Abu.y == 0 && Abu.x <= target.x)
+		{
+			SETFOUND(globalID);
+		}
 	}
 }
