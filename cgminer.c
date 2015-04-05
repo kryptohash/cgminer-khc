@@ -179,6 +179,7 @@ static bool no_work;
 char *opt_icarus_options = NULL;
 char *opt_icarus_timing = NULL;
 bool opt_worktime;
+bool opt_secure;
 #ifdef USE_AVALON
 char *opt_avalon_options = NULL;
 char *opt_bitburner_fury_options = NULL;
@@ -1338,6 +1339,9 @@ static struct opt_table opt_config_table[] = {
 			opt_hidden
 #endif
 			),
+    OPT_WITHOUT_ARG("--secure",
+            opt_set_bool, &opt_secure,
+            "Connect via SSL/TLS but only to servers with authentic SSL Certificates"),
 	OPT_WITHOUT_ARG("--no-pool-disable",
 			opt_set_invbool, &opt_disable_pool,
 			opt_hidden),

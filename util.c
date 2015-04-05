@@ -344,7 +344,15 @@ json_t *json_rpc_call(CURL *curl, const char *url,
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
 	curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, resp_hdr_cb);
 	curl_easy_setopt(curl, CURLOPT_HEADERDATA, &hi);
-	curl_easy_setopt(curl, CURLOPT_USE_SSL, CURLUSESSL_TRY);
+    if (opt_secure) {
+        curl_easy_setopt(curl, CURLOPT_USE_SSL, CURLUSESSL_ALL);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+        curl_easy_setopt(curl, CURLOPT_CAINFO, "cacert.pem");
+    }
+    else {
+	    curl_easy_setopt(curl, CURLOPT_USE_SSL, CURLUSESSL_TRY);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+    }
 	if (pool->rpc_proxy) {
 		curl_easy_setopt(curl, CURLOPT_PROXY, pool->rpc_proxy);
 		curl_easy_setopt(curl, CURLOPT_PROXYTYPE, pool->rpc_proxytype);
@@ -412,7 +420,19 @@ json_t *json_rpc_call(CURL *curl, const char *url,
 
 	rc = curl_easy_perform(curl);
 	if (rc) {
-		applog(LOG_INFO, "HTTP request failed: %s", curl_err_str);
+        if (opt_secure) {
+            applog(LOG_WARNING, "HTTPS request returned %d \"%s\"", rc, curl_err_str);
+            if (rc == 52) {
+                applog(LOG_WARNING, "You might be connecting to a SSL/TLS server that does not have a SSL certificate signed by a trusted Certification Authority or worse, you could be a victim of a MITM attack.");
+                databuf_free(&all_data);
+                curl_slist_free_all(headers);
+                curl_easy_reset(curl);
+                _quit(1);
+            }
+        }
+        else {
+            applog(LOG_INFO, "HTTP request returned %d \"%s\"", rc, curl_err_str);
+        }
 		goto err_out;
 	}
 

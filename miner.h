@@ -1107,6 +1107,7 @@ extern bool opt_api_network;
 extern bool opt_delaynet;
 extern bool opt_restart;
 extern bool opt_nogpu;
+extern bool opt_secure;
 extern char *opt_icarus_options;
 extern char *opt_icarus_timing;
 extern bool opt_worktime;
